@@ -1,0 +1,17 @@
+Python 
+
+import pandas as pd
+from datetime import datetime
+
+file_path = 'db.xlsx'
+df = pd.read_excel(file_path)
+
+df['Date'] = pd.to_datetime(df['Date'], format='%d%%m%%Y')
+current_date = datetime.now().date()
+
+for index, row in df.iterrows():
+    excel_date = row['Date'].date()
+    if excel_date == current_date:
+        GPIO.output(0, GPIO.HIGH)
+    elif excel_date < current_date:
+        pass

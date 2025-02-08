@@ -1,0 +1,214 @@
+#include "SPI.h"
+#include "MFRC522.h"
+#include "pitches.h"
+#include <Stepper.h>
+#include <LiquidCrystal_I2C.h>
+
+#define SS_PIN 10
+#define RST_PIN 9
+#define STEP_PIN 7
+#define DIR_PIN 6
+#define TRIG_PIN 4
+#define RECEIVE_PIN 5
+
+int melody[] = {
+
+
+  NOTE_C4, NOTE_G3, NOTE_G3, NOTE_A3, NOTE_G3, 0, NOTE_B3, NOTE_C4
+
+};
+
+int noteDurations[] = {
+
+
+  4, 8, 8, 4, 4, 4, 4, 4
+
+};
+
+
+MFRC522 mfrc(SS_PIN, RST_PIN);
+String cardID = "C1A092F";
+String tagID = "";
+Stepper st(800, STEP_PIN, DIR_PIN);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+void setup() {
+  Serial.begin(9600);
+  SPI.begin();
+  mfrc.PCD_Init();
+  delay(4);
+  mfrc.PCD_DumpVersionToSerial();
+  Serial.println(F("Scan PICC to see UID"));
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(RECEIVE_PIN, INPUT);
+  st.setSpeed(150);
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0, 0);
+}
+
+void loop() {
+  lcd.print("Bring card");
+  while (getID()) {
+
+    if (cardID == tagID) {
+      lcd.clear();
+      Serial.println("Access Granted!");
+      lcd.print("Access Granted!");
+      for (int thisNote = 0; thisNote < 8; thisNote++) {
+
+        // to calculate the note duration, take one second divided by the note type.
+        //e.g. quarter note = 1000 / 4, eighth note = 1000/8, etc.
+
+        int noteDuration = 1000 / noteDurations[thisNote];
+        tone(3, melody[thisNote], noteDuration);
+
+        // to distinguish the notes, set a minimum time between them.
+        // the note's duration + 30% seems to work well:
+        
+        int pauseBetweenNotes = noteDuration * 1.30;
+        delay(pauseBetweenNotes);
+
+        // stop the tone playing:
+
+        noTone(3);
+      }
+      st.step(-15000);
+      Serial.print("ID: ");
+      Serial.println(tagID);
+      delay(2500);
+
+      float dist = getDistance();
+      delayMicroseconds(5);
+
+      while (dist > 8){
+        dist = getDistance();
+        Serial.println(dist);
+      };
+
+      delay(2500);
+      st.step(15000);
+      Serial.println('Done');
+    }
+    else {
+      lcd.clear();
+      Serial.println("Access Denied!");
+      lcd.print("Access Denied!");
+      tone(3, 500, 1500);
+      delay(1500);
+      noTone(3);
+      
+    }
+  lcd.clear();
+  }
+}
+
+
+boolean getID() {
+  if (! mfrc.PICC_IsNewCardPresent()) {
+    return false;
+  }
+
+  if (! mfrc.PICC_ReadCardSerial()) {
+    return false;
+  }
+  Serial.println("New card");
+  tagID = "";
+  
+  for (uint8_t i = 0; i < 4; i++) {
+    tagID.concat(String(mfrc.uid.uidByte[i], HEX));
+  }
+
+  tagID.toUpperCase();
+  mfrc.PICC_HaltA();
+  return true;
+}
+
+float getDistance() {
+  // импульс 10мкс
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  // измеряем время ответного импульса
+  uint32_t us = pulseIn(RECEIVE_PIN, HIGH);
+  // считаем расстояние и возвращаем
+  return (us / 58.2);
+}
+
+#include <SimpleKeypad.h>
+#include <Servo.h>
+
+#define TRIG_PIN 11
+#define RECEIVE_PIN 12
+#define SERVO_PIN 13
+#define KP_ROWS 4
+
+#define KP_COLS 4
+constexpr uint8_t MOSFET_PIN = 10;
+
+const byte ROWS = 4; 
+const byte COLS = 4;
+
+long duration, cm;
+
+byte colPins[KP_COLS] = {6, 7, 8, 9};
+byte rowPins[KP_ROWS] = {2, 3, 4, 5};
+
+char keys[KP_ROWS][KP_COLS] = {
+  {'1', '2', '3', 'A'},
+  {'4', '5', '6', 'B'},
+  {'7', '8', '9', 'C'},
+  {'*', '0', '#', 'D'}
+};
+
+SimpleKeypad pad((char*)keys, rowPins, colPins, KP_ROWS, KP_COLS);
+
+Servo servo;
+
+char keyCode = '5';
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(RECEIVE_PIN, INPUT);
+  pinMode(MOSFET_PIN, OUTPUT);
+  servo.attach(SERVO_PIN);
+}
+
+void loop() {
+  digitalWrite(MOSFET_PIN, HIGH);
+  char key = pad.getKey();
+  Serial.println(key);
+  // если кнопка нажата (не 0 символ)
+  if (key==keyCode) {
+    digitalWrite(MOSFET_PIN, LOW);
+    delay(500);
+    servo.write(73);
+    delay(500);
+    float dist = getDistance();
+    delayMicroseconds(5);
+
+    while (dist > 8){
+      dist = getDistance();
+      Serial.println(dist);
+    };
+
+    delay(2000);
+    servo.write(-10);
+    delay(770);
+    digitalWrite(MOSFET_PIN, HIGH);
+
+    Serial.println('Done');
+  }
+}
+
+float getDistance() {
+  // импульс 10мкс
+  digitalWrite(TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG_PIN, LOW);
+  // измеряем время ответного импульса
+  uint32_t us = pulseIn(RECEIVE_PIN, HIGH);
+  // считаем расстояние и возвращаем
+  return (us / 58.2);
+}
